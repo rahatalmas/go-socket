@@ -2,6 +2,7 @@ package hub
 
 import (
 	"butter-socket/models"
+	"context"
 	"fmt"
 	"sync"
 
@@ -15,6 +16,7 @@ type Client struct {
 	Send         chan []byte
 	Customer     *models.Customer
 	Conversation *models.Conversation
+	CancelAI     context.CancelFunc
 }
 
 // Hub maintains active clients and broadcasts messages
