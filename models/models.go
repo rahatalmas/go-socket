@@ -49,6 +49,7 @@ type WSMessage struct {
 type MsgInOut struct {
 	SenderId    string `json:"sender_id"`
 	SenderType  string `json:"sender_type"`
+	ReceiverId  string `json:"receiver_id,omitempty"`
 	Content     string `json:"content"`
 	ContentType string `json:"content_type"`
 	CreatedAt   string `json:"created_at"`

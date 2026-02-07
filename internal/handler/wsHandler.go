@@ -4,7 +4,6 @@ import (
 	"butter-socket/internal/hub"
 	"butter-socket/models"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -76,6 +75,7 @@ func WsHandler(h *hub.Hub, w http.ResponseWriter, r *http.Request) {
 
 	// Create a new client with parameters from query string
 	client := &hub.Client{
+		Type: "customer",
 		Hub:  h,
 		Conn: conn,
 		Send: make(chan []byte, 256),
@@ -196,8 +196,6 @@ func handleIncomingMessage(client *hub.Client, message []byte) {
 	case "accept_chat":
 		handleHumanAcceptTheChat(client, wsMsg.Payload)
 	case "message":
-		fmt.Println("client id: ", client.Customer.Id)
-		fmt.Println("flags: ", client.SosFlag, client.FlagRevealed)
 		if client.FlagRevealed == true {
 			handleConversationWithHuman(client, wsMsg.Payload)
 		} else {

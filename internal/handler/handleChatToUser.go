@@ -37,19 +37,29 @@ func handleHumanAcceptTheChat(client *hub.Client, payload any) {
 	json.Unmarshal(payloadBytes, &transferPayload)
 	fmt.Println("Accepted Payload(user conversation): ", *transferPayload.Customer)
 	//-------------------------------------------//
-	fmt.Println("user id ", client.User.UserID)
-	customer := client.Hub.GetAllClients()[transferPayload.Customer.Id]
-	customer.FlagRevealed = true
-	customer.User = client.User
-	fmt.Println("assigned user ", customer.User)
-	sendMessage(client.Hub.GetAllClients()[transferPayload.Customer.Id], "connection_event", "human communication started")
+	if client.Hub.GetAllClients()[transferPayload.Customer.Id] != nil {
+		client.SosFlag = true
+		client.FlagRevealed = true
+		fmt.Println("user id ", client.User.UserID)
+		customer := client.Hub.GetAllClients()[transferPayload.Customer.Id]
+		customer.FlagRevealed = true
+		customer.User = client.User
+		fmt.Println("assigned user ", customer.User)
+		sendMessage(client.Hub.GetAllClients()[transferPayload.Customer.Id], "connection_event", "human communication started")
+	}
 }
 
 // trigger name: message
 func handleConversationWithHuman(client *hub.Client, payload any) {
-	fmt.Println("customer id ", client.Customer.Id)
-	fmt.Println(payload)
-	fmt.Println(client.SosFlag)
-	fmt.Println(client.FlagRevealed)
-	fmt.Println("assigned user:", *client.User)
+	if client.Type == "customer" {
+		user := client.User
+		sendMessage(client.Hub.GetAllUsers()[user.UserID], "message", payload)
+	} else {
+		payloadBytes, _ := json.Marshal(payload)
+		var msgPayload models.MsgInOut
+		fmt.Println(msgPayload)
+		json.Unmarshal(payloadBytes, &msgPayload)
+		customer := client.Hub.GetAllClients()[msgPayload.ReceiverId]
+		sendMessage(customer, "message", payload)
+	}
 }
