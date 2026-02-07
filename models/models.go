@@ -24,8 +24,9 @@ type Message struct {
 }
 
 type Conversation struct {
-	MetaData
-	Customer
+	*MetaData    `json:"metadata"`
+	*Customer    `json:"customer"`
+	*User        `json:"user"`
 	Messages     []Message `json:"messages"`
 	Id           string    `json:"id"`
 	Status       string    `json:"status"`
@@ -35,18 +36,46 @@ type Conversation struct {
 	CompanyId    string    `json:"company_id"`
 	DepartmentId string    `json:"department_id"`
 	AssignedTo   string    `json:"assigned_to"`
-	Source       string
+	Source       string    `json:"source"`
 }
 
 // WebSocket message types
 type WSMessage struct {
-	Type    string      `json:"type"`
-	Payload interface{} `json:"payload"` //msg in out
+	Type    string `json:"type"`
+	Payload any    `json:"payload"` //msg in out
 }
 
+// payload for -> trigger: message
 type MsgInOut struct {
+	SenderId    string `json:"sender_id"`
 	SenderType  string `json:"sender_type"`
 	Content     string `json:"content"`
 	ContentType string `json:"content_type"`
 	CreatedAt   string `json:"created_at"`
+}
+
+// payload for -> trigger: transfer_chat
+type TransferChatPayload struct {
+}
+
+//payload for -> trigger: accept_chat
+
+// api response for user data
+type EssentialResponse struct {
+	Success   bool   `json:"success"`
+	Message   string `json:"message"`
+	User      User   `json:"data"`
+	Timestamp string `json:"timestamp"`
+	Path      string `json:"path"`
+}
+
+type User struct {
+	UserID      string       `json:"userId"`
+	CompanyID   string       `json:"companyId"`
+	Departments []Department `json:"departments"`
+}
+
+type Department struct {
+	DepartmentID   string `json:"department_id"`
+	DepartmentName string `json:"department_name"`
 }

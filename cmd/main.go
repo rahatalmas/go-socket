@@ -16,8 +16,12 @@ func main() {
 	go h.Run()
 
 	// Setup routes
-	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/ws/customer", func(w http.ResponseWriter, r *http.Request) {
 		handler.WsHandler(h, w, r)
+	})
+
+	http.HandleFunc("/ws/user", func(w http.ResponseWriter, r *http.Request) {
+		handler.WsUserHandler(h, w, r)
 	})
 
 	// Start server

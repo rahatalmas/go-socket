@@ -4,6 +4,7 @@ import (
 	"butter-socket/internal/hub"
 	"butter-socket/models"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -87,6 +88,11 @@ func WsHandler(h *hub.Hub, w http.ResponseWriter, r *http.Request) {
 			Id:        uuid.New().String(),
 			CompanyId: companyId,
 			Status:    "open",
+			Customer: &models.Customer{
+				Id:        customerId,
+				CompanyId: companyId,
+				Source:    source,
+			},
 		},
 	}
 
@@ -185,69 +191,24 @@ func handleIncomingMessage(client *hub.Client, message []byte) {
 	}
 
 	switch wsMsg.Type {
+	case "transfer_chat":
+		handleChatTransferToUser(client, wsMsg.Payload)
+	case "accept_chat":
+		handleHumanAcceptTheChat(client, wsMsg.Payload)
 	case "message":
-		handleChatStreamMessage(client, wsMsg.Payload)
+		fmt.Println("client id: ", client.Customer.Id)
+		fmt.Println("flags: ", client.SosFlag, client.FlagRevealed)
+		if client.FlagRevealed == true {
+			handleConversationWithHuman(client, wsMsg.Payload)
+		} else {
+			handleChatStreamMessage(client, wsMsg.Payload)
+		}
 	case "ping":
 		sendPong(client)
 	default:
 		sendError(client, "Unknown message type")
 	}
 }
-
-// handleChatMessage processes chat messages
-// func handleChatMessage(client *hub.Client, payload any) {
-// 	payloadBytes, err := json.Marshal(payload)
-// 	if err != nil {
-// 		sendError(client, "Invalid payload")
-// 		return
-// 	}
-
-// 	var msgIn = &models.MsgInOut{}
-
-// 	if err := json.Unmarshal(payloadBytes, &msgIn); err != nil {
-// 		sendError(client, "Invalid message payload")
-// 		return
-// 	}
-
-// 	// Build authoritative message //for db store-> producer
-// 	userMsg := models.Message{
-// 		MetaData: models.MetaData{
-// 			CreatedAt: time.Now().Format(time.RFC3339),
-// 		},
-// 		Id:             uuid.New().String(),
-// 		ConversationId: client.Conversation.Id,
-// 		SenderId:       client.Customer.Id,
-// 		SenderType:     "customer",
-// 		Content:        msgIn.Content,
-// 		ContentType:    msgIn.ContentType,
-// 	}
-// 	fmt.Println(userMsg)
-// 	// Process with LLM
-// 	reply := llm.AskButterAI(userMsg.Content)
-
-// 	// Build authoritative message //for db store-> produce
-// 	systemMsg := models.Message{
-// 		MetaData: models.MetaData{
-// 			CreatedAt: time.Now().Format(time.RFC3339),
-// 		},
-// 		Id:             uuid.New().String(),
-// 		ConversationId: client.Conversation.Id,
-// 		SenderId:       "a-1",
-// 		SenderType:     "AI-AGENT",
-// 		Content:        reply,
-// 		ContentType:    "text",
-// 	}
-// 	fmt.Println(systemMsg)
-
-// 	var msgOut = models.MsgInOut{
-// 		SenderType:  systemMsg.SenderType,
-// 		Content:     systemMsg.Content,
-// 		ContentType: systemMsg.ContentType,
-// 		CreatedAt:   systemMsg.CreatedAt,
-// 	}
-
-// 	sendMessage(client, "message", msgOut)
-// }
 
 // sendWelcomeMessage sends a welcome message to newly connected clients
 func sendWelcomeMessage(client *hub.Client) {

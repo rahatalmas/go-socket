@@ -11,18 +11,29 @@ import (
 
 // Client represents a connected customer
 type Client struct {
+	Type         string
 	Hub          *Hub
 	Conn         *websocket.Conn
 	Send         chan []byte
 	Customer     *models.Customer
+	User         *models.User
 	Conversation *models.Conversation
 	CancelAI     context.CancelFunc
+	SosFlag      bool // -> true when customer talking to human or need to talk to human
+	FlagRevealed bool // -> when a human accepts connection
 }
 
 // Hub maintains active clients and broadcasts messages
 type Hub struct {
 	// Registered clients
-	clients map[*Client]bool
+	clients  map[string]*Client
+	allUsers map[string]*Client
+
+	//registered companies to departments to users
+	users map[string]map[string]map[*Client]bool
+
+	//customer to user meeting room
+	meetingRoom map[*Client]*Client
 
 	// Inbound messages from clients
 	broadcast chan []byte
@@ -40,7 +51,8 @@ type Hub struct {
 // NewHub creates a new Hub instanceinstance
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[*Client]bool),
+		clients:    make(map[string]*Client),
+		allUsers:   make(map[string]*Client),
 		broadcast:  make(chan []byte),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
@@ -53,16 +65,29 @@ func (h *Hub) Run() {
 		select {
 		case client := <-h.register:
 			h.mu.Lock()
-			h.clients[client] = true
+			if client.User != nil || client.Type == "user" {
+				h.allUsers[client.User.UserID] = client
+				fmt.Printf("user client registered. Total clients: %d\n", len(h.allUsers))
+			} else {
+				h.clients[client.Customer.Id] = client
+				fmt.Printf("customer client registered. Total clients: %d\n", len(h.clients))
+			}
 			h.mu.Unlock()
-			fmt.Printf("Client registered. Total clients: %d\n", len(h.clients))
 
 		case client := <-h.unregister:
 			h.mu.Lock()
-			if _, ok := h.clients[client]; ok {
-				delete(h.clients, client)
-				close(client.Send)
-				fmt.Printf("Client unregistered. Total clients: %d\n", len(h.clients))
+			if client.User != nil || client.Type == "user" {
+				if _, ok := h.allUsers[client.User.UserID]; ok {
+					delete(h.clients, client.User.UserID)
+					close(client.Send)
+					fmt.Printf("customer client unregistered. Total clients: %d\n", len(h.clients))
+				}
+			} else {
+				if _, ok := h.clients[client.Customer.Id]; ok {
+					delete(h.clients, client.Customer.Id)
+					close(client.Send)
+					fmt.Printf("customer client unregistered. Total clients: %d\n", len(h.clients))
+				}
 			}
 			h.mu.Unlock()
 
@@ -70,9 +95,9 @@ func (h *Hub) Run() {
 			h.mu.RLock()
 			for client := range h.clients {
 				select {
-				case client.Send <- message:
+				case h.clients[client].Send <- message:
 				default:
-					close(client.Send)
+					close(h.clients[client].Send)
 					delete(h.clients, client)
 				}
 			}
@@ -101,4 +126,22 @@ func (h *Hub) GetClientCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return len(h.clients)
+}
+
+func (h *Hub) GetAllUserCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.allUsers)
+}
+
+func (h *Hub) GetAllClients() map[string]*Client {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.clients
+}
+
+func (h *Hub) GetAllUsers() map[string]*Client {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.allUsers
 }
