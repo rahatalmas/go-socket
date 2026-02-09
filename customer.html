@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-black text-white min-h-screen">
+    <div class="container mx-auto p-4 max-w-4xl">
+        <div id="connectionForm" class="mb-6">
+            <h1 class="text-2xl font-bold mb-4">Customer Chat</h1>
+            <div class="bg-gray-900 p-4 rounded border border-gray-700">
+                <div class="grid grid-cols-3 gap-3 mb-3">
+                    <input type="text" id="companyId" placeholder="Company ID" 
+                        class="bg-black border border-gray-600 px-3 py-2 rounded text-white">
+                    <input type="text" id="customerId" placeholder="Customer ID" 
+                        class="bg-black border border-gray-600 px-3 py-2 rounded text-white">
+                    <input type="text" id="socketAddr" value="ws://localhost:4646/ws/customer" 
+                        class="bg-black border border-gray-600 px-3 py-2 rounded text-white">
+                </div>
+                <button onclick="connect()" class="bg-white text-black px-4 py-2 rounded w-full font-semibold hover:bg-gray-200">
+                    Connect
+                </button>
+            </div>
+        </div>
+
+        <!-- Chat Interface (hidden until connected) -->
+        <div id="chatInterface" class="hidden">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold">Chat</h2>
+                <div class="flex gap-2 items-center">
+                    <span id="statusIndicator" class="text-sm"></span>
+                    <button onclick="disconnect()" class="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700">
+                        Disconnect
+                    </button>
+                </div>
+            </div>
+
+            <!-- Messages -->
+            <div id="messages" class="bg-gray-900 border border-gray-700 rounded h-96 overflow-y-auto p-4 mb-4">
+                <!-- Messages will appear here -->
+            </div>
+
+            <!-- Input -->
+            <div class="flex gap-2 mb-4">
+                <input type="text" id="messageInput" placeholder="Type your message..." 
+                    class="flex-1 bg-black border border-gray-600 px-3 py-2 rounded text-white"
+                    onkeypress="if(event.key==='Enter') sendMessage()">
+                <button onclick="sendMessage()" class="bg-white text-black px-6 py-2 rounded font-semibold hover:bg-gray-200">
+                    Send
+                </button>
+            </div>
+
+            <!-- Transfer Chat Button -->
+            <button onclick="transferChat()" class="bg-orange-600 text-white px-4 py-2 rounded w-full hover:bg-orange-700">
+                Transfer to Human Agent
+            </button>
+        </div>
+
+        <!-- Event Logger -->
+        <div class="mt-6">
+            <h3 class="text-lg font-bold mb-2">Event Logs</h3>
+            <div id="logger" class="bg-gray-900 border border-gray-700 rounded h-64 overflow-y-auto p-3 font-mono text-xs">
+                <!-- Logs will appear here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let companyId = '';
+        let customerId = '';
+
+        function log(message, type = 'info') {
+            const logger = document.getElementById('logger');
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                info: 'text-gray-400',
+                success: 'text-green-400',
+                error: 'text-red-400',
+                send: 'text-blue-400',
+                receive: 'text-yellow-400'
+            };
+            logger.innerHTML += `<div class="${colors[type]}">[${timestamp}] ${message}</div>`;
+            logger.scrollTop = logger.scrollHeight;
+        }
+
+        function connect() {
+            companyId = document.getElementById('companyId').value.trim();
+            customerId = document.getElementById('customerId').value.trim();
+            const socketAddr = document.getElementById('socketAddr').value.trim();
+
+            if (!companyId || !customerId) {
+                alert('Please enter both Company ID and Customer ID');
+                return;
+            }
+
+            const wsUrl = `${socketAddr}?company_id=${companyId}&customer_id=${customerId}&source=web`;
+            log(`Connecting to: ${wsUrl}`, 'info');
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                log('Connected to server', 'success');
+                document.getElementById('connectionForm').classList.add('hidden');
+                document.getElementById('chatInterface').classList.remove('hidden');
+                updateStatus('Connected', 'green');
+            };
+
+            ws.onmessage = (event) => {
+                log(`◀ RECEIVED: ${event.data}`, 'receive');
+                
+                // Handle multiple JSON objects in one message (separated by newlines)
+                const messages = event.data.split('\n').filter(m => m.trim());
+                messages.forEach(msgStr => {
+                    handleMessage(msgStr);
+                });
+            };
+
+            ws.onerror = (error) => {
+                log(`WebSocket error: ${error}`, 'error');
+            };
+
+            ws.onclose = () => {
+                log('Disconnected from server', 'error');
+                updateStatus('Disconnected', 'red');
+                document.getElementById('connectionForm').classList.remove('hidden');
+                document.getElementById('chatInterface').classList.add('hidden');
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        let isAIStreaming = false;
+        let currentAIMessageId = null;
+
+        function handleMessage(data) {
+            try {
+                const msg = JSON.parse(data);
+                log(`Message Type: ${msg.type}`, 'info');
+
+                if (msg.type === 'welcome') {
+                    addMessage('system', msg.payload.content || 'Connected to chat');
+                } else if (msg.type === 'message') {
+                    addMessage(msg.payload.sender_type || 'other', msg.payload.content);
+                } else if (msg.type === 'typing_start') {
+                    // Create empty AI message for streaming with a unique ID
+                    currentAIMessageId = 'ai-msg-' + Date.now();
+                    addMessageWithId('AI-AGENT', '●●●', currentAIMessageId);
+                    isAIStreaming = true;
+                } else if (msg.type === 'message_chunk') {
+                    // Append chunk to the AI message
+                    if (isAIStreaming && currentAIMessageId) {
+                        appendToMessageById(currentAIMessageId, msg.payload.content);
+                    }
+                } else if (msg.type === 'typing_end') {
+                    isAIStreaming = false;
+                    currentAIMessageId = null;
+                } else if (msg.type === 'connection_event') {
+                    addMessage('system', msg.payload.content);
+                } else if (msg.type === 'error') {
+                    addMessage('error', msg.payload.error || 'An error occurred');
+                }
+            } catch (e) {
+                log(`Error parsing message: ${e.message}`, 'error');
+            }
+        }
+
+        function addMessage(sender, content) {
+            addMessageWithId(sender, content, null);
+        }
+
+        function addMessageWithId(sender, content, msgId) {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'mb-3';
+            if (msgId) div.id = msgId;
+
+            let bgColor = 'bg-gray-800';
+            let textColor = 'text-white';
+            let senderLabel = sender;
+
+            if (sender === 'customer' || sender === 'you') {
+                bgColor = 'bg-blue-900';
+                senderLabel = 'You';
+            } else if (sender === 'AI-AGENT') {
+                bgColor = 'bg-green-900';
+                senderLabel = 'AI Agent';
+            } else if (sender === 'system') {
+                bgColor = 'bg-gray-700';
+                textColor = 'text-gray-300';
+                senderLabel = 'System';
+            } else if (sender === 'error') {
+                bgColor = 'bg-red-900';
+                senderLabel = 'Error';
+            }
+
+            div.innerHTML = `
+                <div class="${bgColor} ${textColor} p-3 rounded">
+                    <div class="text-xs text-gray-400 mb-1">${senderLabel}</div>
+                    <div class="message-content">${content}</div>
+                </div>
+            `;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function appendToMessageById(msgId, content) {
+            const msgDiv = document.getElementById(msgId);
+            if (!msgDiv) return;
+            
+            const contentDiv = msgDiv.querySelector('.message-content');
+            if (contentDiv) {
+                // Replace typing indicator on first chunk
+                if (contentDiv.textContent === 'thinking...') {
+                    contentDiv.textContent = content;
+                } else {
+                    contentDiv.textContent += content;
+                }
+                document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const content = input.value.trim();
+
+            if (!content || !ws) return;
+
+            const message = {
+                type: 'message',
+                payload: {
+                    sender_id: customerId,
+                    sender_type: 'customer',
+                    content: content,
+                    content_type: 'text',
+                    created_at: new Date().toISOString()
+                }
+            };
+
+            ws.send(JSON.stringify(message));
+            log(`▶ SENT: ${JSON.stringify(message)}`, 'send');
+            addMessage('you', content);
+            input.value = '';
+        }
+
+        function transferChat() {
+            if (!ws) return;
+
+            const message = {
+                type: 'transfer_chat',
+                payload: {
+                    company_id: companyId,
+                    customer: {
+                        id: customerId,
+                        company_id: companyId
+                    }
+                }
+            };
+
+            ws.send(JSON.stringify(message));
+            log(`▶ SENT transfer_chat: ${JSON.stringify(message)}`, 'send');
+            addMessage('system', 'Requesting human agent...');
+        }
+
+        function updateStatus(text, color) {
+            const indicator = document.getElementById('statusIndicator');
+            indicator.textContent = text;
+            indicator.className = `text-sm text-${color}-400`;
+        }
+    </script>
+</body>
+</html>

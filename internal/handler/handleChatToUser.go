@@ -7,45 +7,49 @@ import (
 	"fmt"
 )
 
-// when user want to connect with a human
 // trigger name: transfer_chat
 func handleChatTransferToUser(client *hub.Client, payload any) {
-	fmt.Println("customer id ", client.Customer.Id)
-	fmt.Println("chat transfer request")
-	fmt.Println("customer-> sos flag waving to for connection: ", client.SosFlag)
-	fmt.Println("payload: ", payload)
-	fmt.Println("conversation: ", *client.Conversation)
-	fmt.Println("conversation user: ", *client.Conversation.Customer)
-	client.SosFlag = true
-	fmt.Println("flag waving: ", client.SosFlag)
-
-	//------------------------logics---------------------/////
-	human := client.Hub.GetAllUsers()
-	if len(human) > 0 {
-		for _, user := range human {
-			sendMessage(user, "transfer_chat", client.Conversation)
+	if !client.SosFlag {
+		client.SosFlag = true
+		fmt.Println("flag waving: ", client.SosFlag)
+		connList := client.Hub.GetAllUserConnByCompanyId(client.Conversation.CompanyId)
+		fmt.Println(len(connList))
+		if len(connList) == 0 {
+			unavilableMsgPayload := models.MsgInOut{
+				SenderType: "system",
+				SenderId:   "system",
+				ReceiverId: client.Customer.Id,
+				Content:    "no one is available to chat",
+			}
+			sendMessage(client, "connection_event", unavilableMsgPayload)
+		} else {
+			for _, conn := range connList {
+				sendMessage(conn, "transfer_chat", payload)
+			}
 		}
 	}
+
 }
 
 // trigger name: accept_chat (for users)
 func handleHumanAcceptTheChat(client *hub.Client, payload any) {
-	//-------paylad construction-------////
 	payloadBytes, _ := json.Marshal(payload)
 	var transferPayload models.Conversation
-	fmt.Println(transferPayload)
 	json.Unmarshal(payloadBytes, &transferPayload)
-	fmt.Println("Accepted Payload(user conversation): ", *transferPayload.Customer)
-	//-------------------------------------------//
+
 	if client.Hub.GetAllClients()[transferPayload.Customer.Id] != nil {
 		client.SosFlag = true
 		client.FlagRevealed = true
-		fmt.Println("user id ", client.User.UserID)
 		customer := client.Hub.GetAllClients()[transferPayload.Customer.Id]
 		customer.FlagRevealed = true
 		customer.User = client.User
-		fmt.Println("assigned user ", customer.User)
-		sendMessage(client.Hub.GetAllClients()[transferPayload.Customer.Id], "connection_event", "human communication started")
+
+		unavilableMsgPayload := models.MsgInOut{
+			SenderId:   "system",
+			ReceiverId: transferPayload.Customer.Id,
+			Content:    "human communication started",
+		}
+		sendMessage(client.Hub.GetAllClients()[transferPayload.Customer.Id], "connection_event", unavilableMsgPayload)
 	}
 }
 
@@ -53,13 +57,26 @@ func handleHumanAcceptTheChat(client *hub.Client, payload any) {
 func handleConversationWithHuman(client *hub.Client, payload any) {
 	if client.Type == "customer" {
 		user := client.User
-		sendMessage(client.Hub.GetAllUsers()[user.UserID], "message", payload)
+		sendMessage(client.Hub.GetUserConnByUserId(user.UserID), "message", payload)
 	} else {
 		payloadBytes, _ := json.Marshal(payload)
 		var msgPayload models.MsgInOut
-		fmt.Println(msgPayload)
 		json.Unmarshal(payloadBytes, &msgPayload)
 		customer := client.Hub.GetAllClients()[msgPayload.ReceiverId]
 		sendMessage(customer, "message", payload)
 	}
 }
+
+// trigger name: typing
+// func typingUpdate(client *hub.Client, payload any) {
+// 	if client.Type == "customer" {
+// 		user := client.User
+// 		sendMessage(client.Hub.GetUserConnByUserId(user.UserID), "message", payload)
+// 	} else {
+// 		payloadBytes, _ := json.Marshal(payload)
+// 		var msgPayload models.MsgInOut
+// 		json.Unmarshal(payloadBytes, &msgPayload)
+// 		customer := client.Hub.GetAllClients()[msgPayload.ReceiverId]
+// 		sendMessage(customer, "typing", payload)
+// 	}
+// }

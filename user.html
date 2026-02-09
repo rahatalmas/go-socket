@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User/Agent Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-black text-white min-h-screen">
+    <div class="container mx-auto p-4">
+        <!-- Connection Form -->
+        <div id="connectionForm" class="mb-6">
+            <h1 class="text-2xl font-bold mb-4">User/Agent Dashboard</h1>
+            <div class="bg-gray-900 p-4 rounded border border-gray-700 max-w-md">
+                <input type="text" id="userToken" placeholder="Enter your token" 
+                    class="bg-black border border-gray-600 px-3 py-2 rounded text-white w-full mb-3">
+                <input type="text" id="socketAddr" value="ws://localhost:4646/ws/user" 
+                    class="bg-black border border-gray-600 px-3 py-2 rounded text-white w-full mb-3">
+                <button onclick="connect()" class="bg-white text-black px-4 py-2 rounded w-full font-semibold hover:bg-gray-200">
+                    Connect
+                </button>
+            </div>
+        </div>
+
+        <!-- Dashboard (hidden until connected) -->
+        <div id="dashboard" class="hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold">Agent Dashboard</h2>
+                <div class="flex gap-3 items-center">
+                    <span id="statusIndicator" class="text-sm"></span>
+                    <button onclick="disconnect()" class="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700">
+                        Disconnect
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-12 gap-4">
+                <!-- Left Sidebar - Conversations -->
+                <div class="col-span-3 space-y-4">
+                    <!-- Pending Accept -->
+                    <div class="bg-gray-900 border border-gray-700 rounded">
+                        <div class="bg-orange-900 px-3 py-2 border-b border-gray-700">
+                            <h3 class="font-bold text-sm">Pending Accept (<span id="pendingCount">0</span>)</h3>
+                        </div>
+                        <div id="pendingList" class="p-2 space-y-1 max-h-48 overflow-y-auto">
+                            <div class="text-gray-500 text-xs p-2">No pending chats</div>
+                        </div>
+                    </div>
+
+                    <!-- Active Chats -->
+                    <div class="bg-gray-900 border border-gray-700 rounded">
+                        <div class="bg-green-900 px-3 py-2 border-b border-gray-700">
+                            <h3 class="font-bold text-sm">Active Chats (<span id="activeCount">0</span>)</h3>
+                        </div>
+                        <div id="activeList" class="p-2 space-y-1 max-h-48 overflow-y-auto">
+                            <div class="text-gray-500 text-xs p-2">No active chats</div>
+                        </div>
+                    </div>
+
+                    <!-- All Conversations -->
+                    <div class="bg-gray-900 border border-gray-700 rounded">
+                        <div class="bg-gray-800 px-3 py-2 border-b border-gray-700">
+                            <h3 class="font-bold text-sm">All Inboxes (<span id="allCount">0</span>)</h3>
+                        </div>
+                        <div id="allList" class="p-2 space-y-1 max-h-48 overflow-y-auto">
+                            <div class="text-gray-500 text-xs p-2">No conversations</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Center - Chat Area -->
+                <div class="col-span-6">
+                    <div id="noChatSelected" class="bg-gray-900 border border-gray-700 rounded h-full flex items-center justify-center">
+                        <div class="text-gray-500 text-center">
+                            <p class="text-lg mb-2">No conversation selected</p>
+                            <p class="text-sm">Select a conversation from the left to start chatting</p>
+                        </div>
+                    </div>
+
+                    <div id="chatArea" class="hidden">
+                        <!-- Chat Header -->
+                        <div class="bg-gray-900 border border-gray-700 rounded-t px-4 py-3 flex items-center justify-between">
+                            <div>
+                                <h3 class="font-bold" id="chatCustomerName">Customer</h3>
+                                <p class="text-xs text-gray-400" id="chatConvId"></p>
+                            </div>
+                            <div class="flex gap-2">
+                                <button id="acceptBtn" onclick="acceptChat()" 
+                                    class="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 hidden">
+                                    Accept Chat
+                                </button>
+                                <button id="endChatBtn" onclick="endChat()" 
+                                    class="bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700">
+                                    End Chat
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Messages -->
+                        <div id="chatMessages" class="bg-gray-900 border-x border-gray-700 h-96 overflow-y-auto p-4">
+                            <!-- Messages appear here -->
+                        </div>
+
+                        <!-- Input -->
+                        <div class="bg-gray-900 border border-gray-700 rounded-b p-4 flex gap-2">
+                            <input type="text" id="messageInput" placeholder="Type your message..." 
+                                class="flex-1 bg-black border border-gray-600 px-3 py-2 rounded text-white"
+                                onkeypress="if(event.key==='Enter') sendMessage()">
+                            <button onclick="sendMessage()" class="bg-white text-black px-6 py-2 rounded font-semibold hover:bg-gray-200">
+                                Send
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Sidebar - Event Logger -->
+                <div class="col-span-3">
+                    <div class="bg-gray-900 border border-gray-700 rounded h-full flex flex-col">
+                        <div class="bg-gray-800 px-3 py-2 border-b border-gray-700">
+                            <h3 class="font-bold text-sm">Event Logs</h3>
+                        </div>
+                        <div id="logger" class="flex-1 p-3 overflow-y-auto font-mono text-xs">
+                            <!-- Logs appear here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let conversations = new Map(); // conversationId -> conversation object
+        let currentConvId = null;
+        let userToken = '';
+
+        function log(message, type = 'info') {
+            const logger = document.getElementById('logger');
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                info: 'text-gray-400',
+                success: 'text-green-400',
+                error: 'text-red-400',
+                send: 'text-blue-400',
+                receive: 'text-yellow-400'
+            };
+            logger.innerHTML += `<div class="${colors[type]}">[${timestamp}] ${message}</div>`;
+            logger.scrollTop = logger.scrollHeight;
+        }
+
+        function connect() {
+            userToken = document.getElementById('userToken').value.trim();
+            const socketAddr = document.getElementById('socketAddr').value.trim();
+
+            if (!userToken) {
+                alert('Please enter your token');
+                return;
+            }
+
+            const wsUrl = `${socketAddr}?token=${userToken}`;
+            log(`Connecting to: ${wsUrl}`, 'info');
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                log('Connected to server', 'success');
+                document.getElementById('connectionForm').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                updateStatus('Connected', 'green');
+            };
+
+            ws.onmessage = (event) => {
+                log(`◀ RECEIVED: ${event.data}`, 'receive');
+                handleMessage(event.data);
+            };
+
+            ws.onerror = (error) => {
+                log(`WebSocket error: ${error}`, 'error');
+            };
+
+            ws.onclose = () => {
+                log('Disconnected from server', 'error');
+                updateStatus('Disconnected', 'red');
+                document.getElementById('connectionForm').classList.remove('hidden');
+                document.getElementById('dashboard').classList.add('hidden');
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function handleMessage(data) {
+            try {
+                const msg = JSON.parse(data);
+                log(`Message Type: ${msg.type}`, 'info');
+
+                if (msg.type === 'welcome') {
+                    log('Welcome message received', 'success');
+                } else if (msg.type === 'transfer_chat') {
+                    // New chat transfer request
+                    const conv = msg.payload;
+                    const convId = conv.id || `conv_${Date.now()}`;
+                    conversations.set(convId, {
+                        id: convId,
+                        customer: conv.customer,
+                        company_id: conv.company_id,
+                        status: 'pending',
+                        messages: []
+                    });
+                    updateConversationLists();
+                    log(`New chat transfer: ${convId}`, 'success');
+                } else if (msg.type === 'message') {
+                    // Message received
+                    if (currentConvId && conversations.has(currentConvId)) {
+                        addMessageToChat(msg.payload.sender_type || 'customer', msg.payload.content);
+                    }
+                } else if (msg.type === 'connection_event') {
+                    log(`Connection event: ${msg.payload.content}`, 'info');
+                } else if (msg.type === 'error') {
+                    log(`Error: ${msg.payload.error}`, 'error');
+                }
+            } catch (e) {
+                log(`Error parsing message: ${e.message}`, 'error');
+            }
+        }
+
+        function updateConversationLists() {
+            const pending = Array.from(conversations.values()).filter(c => c.status === 'pending');
+            const active = Array.from(conversations.values()).filter(c => c.status === 'active');
+            const all = Array.from(conversations.values());
+
+            // Update counts
+            document.getElementById('pendingCount').textContent = pending.length;
+            document.getElementById('activeCount').textContent = active.length;
+            document.getElementById('allCount').textContent = all.length;
+
+            // Update lists
+            updateList('pendingList', pending, 'orange');
+            updateList('activeList', active, 'green');
+            updateList('allList', all, 'gray');
+        }
+
+        function updateList(listId, convs, color) {
+            const list = document.getElementById(listId);
+            if (convs.length === 0) {
+                list.innerHTML = '<div class="text-gray-500 text-xs p-2">No conversations</div>';
+                return;
+            }
+
+            list.innerHTML = convs.map(conv => `
+                <div onclick="selectConversation('${conv.id}')" 
+                    class="bg-${color}-900 hover:bg-${color}-800 cursor-pointer p-2 rounded border border-${color}-700">
+                    <div class="text-xs font-bold">${conv.customer?.id || 'Unknown'}</div>
+                    <div class="text-xs text-gray-400">${conv.id}</div>
+                    <div class="text-xs text-${color}-400 mt-1">${conv.status}</div>
+                </div>
+            `).join('');
+        }
+
+        function selectConversation(convId) {
+            currentConvId = convId;
+            const conv = conversations.get(convId);
+            if (!conv) return;
+
+            document.getElementById('noChatSelected').classList.add('hidden');
+            document.getElementById('chatArea').classList.remove('hidden');
+
+            document.getElementById('chatCustomerName').textContent = conv.customer?.id || 'Customer';
+            document.getElementById('chatConvId').textContent = conv.id;
+
+            // Show/hide accept button
+            const acceptBtn = document.getElementById('acceptBtn');
+            if (conv.status === 'pending') {
+                acceptBtn.classList.remove('hidden');
+            } else {
+                acceptBtn.classList.add('hidden');
+            }
+
+            // Clear and reload messages
+            document.getElementById('chatMessages').innerHTML = '';
+            (conv.messages || []).forEach(msg => {
+                addMessageToChat(msg.sender, msg.content);
+            });
+
+            log(`Selected conversation: ${convId}`, 'info');
+        }
+
+        function acceptChat() {
+            if (!currentConvId || !ws) return;
+
+            const conv = conversations.get(currentConvId);
+            if (!conv) return;
+
+            const message = {
+                type: 'accept_chat',
+                payload: {
+                    id: conv.id,
+                    company_id: conv.company_id,
+                    customer: conv.customer
+                }
+            };
+
+            ws.send(JSON.stringify(message));
+            log(`▶ SENT accept_chat: ${JSON.stringify(message)}`, 'send');
+
+            // Update conversation status
+            conv.status = 'active';
+            updateConversationLists();
+            document.getElementById('acceptBtn').classList.add('hidden');
+        }
+
+        function endChat() {
+            if (!currentConvId || !ws) return;
+
+            const conv = conversations.get(currentConvId);
+            if (!conv) return;
+
+            const message = {
+                type: 'end_chat',
+                payload: {
+                    id: conv.id,
+                    company_id: conv.company_id,
+                    customer: conv.customer
+                }
+            };
+
+            ws.send(JSON.stringify(message));
+            log(`▶ SENT end_chat: ${JSON.stringify(message)}`, 'send');
+
+            // Remove conversation
+            conversations.delete(currentConvId);
+            updateConversationLists();
+            
+            document.getElementById('noChatSelected').classList.remove('hidden');
+            document.getElementById('chatArea').classList.add('hidden');
+            currentConvId = null;
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const content = input.value.trim();
+
+            if (!content || !ws || !currentConvId) return;
+
+            const conv = conversations.get(currentConvId);
+            if (!conv) return;
+
+            const message = {
+                type: 'message',
+                payload: {
+                    sender_type: 'user',
+                    receiver_id: conv.customer?.id,
+                    content: content,
+                    content_type: 'text',
+                    created_at: new Date().toISOString()
+                }
+            };
+
+            ws.send(JSON.stringify(message));
+            log(`▶ SENT: ${JSON.stringify(message)}`, 'send');
+            
+            addMessageToChat('you', content);
+            input.value = '';
+        }
+
+        function addMessageToChat(sender, content) {
+            const messages = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = 'mb-3';
+
+            let bgColor = 'bg-gray-800';
+            let align = 'text-left';
+            let senderLabel = sender;
+
+            if (sender === 'you' || sender === 'user') {
+                bgColor = 'bg-blue-900';
+                align = 'text-right ml-auto';
+                senderLabel = 'You';
+            } else if (sender === 'customer') {
+                bgColor = 'bg-gray-700';
+                senderLabel = 'Customer';
+            }
+
+            div.innerHTML = `
+                <div class="${bgColor} p-3 rounded max-w-md ${align}">
+                    <div class="text-xs text-gray-400 mb-1">${senderLabel}</div>
+                    <div>${content}</div>
+                </div>
+            `;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+
+            // Save to conversation
+            if (currentConvId && conversations.has(currentConvId)) {
+                const conv = conversations.get(currentConvId);
+                conv.messages.push({ sender, content });
+            }
+        }
+
+        function updateStatus(text, color) {
+            const indicator = document.getElementById('statusIndicator');
+            indicator.textContent = text;
+            indicator.className = `text-sm text-${color}-400`;
+        }
+    </script>
+</body>
+</html>

@@ -40,7 +40,7 @@ func WsUserHandler(h *hub.Hub, w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Employee connection attempt with token: %s...", userToken[:min(10, len(userToken))])
 
-	// Prepare request to auth service
+	// request to auth service
 	req, err := http.NewRequest(
 		http.MethodGet,
 		"https://api.studiobutterfly.io/users/socket/essential",
@@ -108,8 +108,8 @@ func WsUserHandler(h *hub.Hub, w http.ResponseWriter, r *http.Request) {
 		Conn:         conn,
 		Send:         make(chan []byte, 256),
 		User:         &result.User,
-		SosFlag:      false,
-		FlagRevealed: false,
+		SosFlag:      true,
+		FlagRevealed: true,
 	}
 
 	// Register the employee
