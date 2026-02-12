@@ -8,7 +8,6 @@ type MetaData struct {
 type Customer struct {
 	Id         string `json:"id"`
 	Name       string `json:"name"`
-	ProfileUri string `json:"profile_uri"`
 	Source     string `json:"source"`
 	CompanyId  string `json:"company_id"`
 }

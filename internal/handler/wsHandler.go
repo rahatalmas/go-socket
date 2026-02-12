@@ -198,7 +198,7 @@ func handleIncomingMessage(client *hub.Client, message []byte) {
 	case "message":
 		if client.FlagRevealed == true {
 			handleConversationWithHuman(client, wsMsg.Payload)
-		} else {
+		} else { 
 			handleChatStreamMessage(client, wsMsg.Payload)
 		}
 	case "ping":

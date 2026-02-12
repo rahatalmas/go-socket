@@ -32,9 +32,6 @@ type Hub struct {
 	//registered companies to departments to users
 	users map[string]map[string][]models.User
 
-	//customer to user meeting room
-	meetingRoom map[*Client]*Client
-
 	// Inbound messages from clients
 	broadcast chan []byte
 
